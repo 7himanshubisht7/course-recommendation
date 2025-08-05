@@ -1,6 +1,7 @@
 import streamlit as st
 import pickle
 import pandas as pd
+from difflib import get_close_matches
 
 # File paths
 COURSE_DATA_PATH = r"C:\Users\Acer\OneDrive\Desktop\course recommendation\Coursera.csv"
@@ -10,96 +11,118 @@ SIMILARITY_PATH = r"C:\Users\Acer\OneDrive\Desktop\course recommendation\similar
 @st.cache_data
 def load_data(course_data_path, similarity_path):
     try:
-        # Load course data from CSV
         course_data = pd.read_csv(course_data_path)
-
-        # Load similarity matrix from pickle file
         with open(similarity_path, 'rb') as file:
             similarity_matrix = pickle.load(file)
-        
         return course_data, similarity_matrix
-    except FileNotFoundError as e:
-        st.error(f"File not found: {e}")
-        return None, None
     except Exception as e:
-        st.error(f"An error occurred: {e}")
+        st.error(f"Error loading data: {e}")
         return None, None
 
-# Recommendation Function
-def recommend_courses(course, course_data, similarity_matrix):
-    # Handle case-insensitive matching
-    course = course.strip().lower()  # Remove leading/trailing spaces and make lowercase
+# Fuzzy Matching
+def get_closest_course_name(user_input, course_data):
     course_data['course_name_lower'] = course_data['Course Name'].str.lower()
-    
-    # Check if the course exists
+    matches = get_close_matches(user_input.lower(), course_data['course_name_lower'].tolist(), n=1, cutoff=0.6)
+    return matches[0] if matches else None
+
+# Recommend Courses
+def recommend_courses(course, course_data, similarity_matrix):
+    course_data['course_name_lower'] = course_data['Course Name'].str.lower()
     if course not in course_data['course_name_lower'].values:
-        st.warning("Course not found. Please check the course name.")
         return None
 
-    # Get the course index
     course_index = course_data[course_data['course_name_lower'] == course].index[0]
     distances = similarity_matrix[course_index]
-    
-    # Get the top 5 recommendations
     course_list = sorted(list(enumerate(distances)), reverse=True, key=lambda x: x[1])[1:6]
-    recommendations = []
 
-    # Collect the recommended courses
+    recommendations = []
     for i in course_list:
         recommended_course = course_data.iloc[i[0]]
         recommendations.append({
-            'course_name': recommended_course['Course Name'],  # Accessing 'Course Name' directly
-            'course_url': recommended_course['Course URL'],    # Accessing 'Course URL' directly
-            'course_description': recommended_course['Course Description'],  # Description if needed
-            'university': recommended_course['University']  # University if needed
+            'course_name': recommended_course['Course Name'],
+            'course_url': recommended_course['Course URL'],
+            'course_description': recommended_course['Course Description'],
+            'university': recommended_course['University']
         })
     return recommendations
 
+# Course Card Display
+def display_course_cards(courses):
+    for course in courses:
+        st.markdown(f"""
+        <div style="border:1px solid #e0e0e0; border-radius:10px; padding:15px; margin:10px 0; background-color:#f8f9fa;">
+            <h4 style="color:#2c3e50;"><a href="{course['course_url']}" target="_blank" style="text-decoration:none;">{course['course_name']}</a></h4>
+            <p style="color:#34495e;"><strong>University:</strong> {course['university']}</p>
+            <p style="color:#555;">{course['course_description']}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-# Streamlit App
+# Main App
 def main():
-    st.title("Course Recommendation System")
-
-    # Sidebar menu
-    menu = ["Home", "Recommend", "About"]
-    choice = st.sidebar.selectbox("Menu", menu)
-
-    # Load data
+    st.set_page_config(page_title="Smart Course Recommender", layout="wide")
+    st.markdown("<h1 style='text-align:center; color:#0072B5;'>🎓 Smart Course Recommendation System</h1>", unsafe_allow_html=True)
+    
     course_data, similarity_matrix = load_data(COURSE_DATA_PATH, SIMILARITY_PATH)
-
     if course_data is None or similarity_matrix is None:
-        st.error("Error loading the data files. Please check the paths and try again.")
+        st.error("Data loading failed.")
         return
 
-    if choice == "Home":
-        st.subheader("Home")
-        st.write("Welcome to the Course Recommendation System!")
-        st.dataframe(course_data.head())
+    # Tabs
+    tab1, tab2, tab3 = st.tabs(["🏠 Home", "🔍 Recommend", "ℹ️ About"])
 
-    elif choice == "Recommend":
-        st.subheader("Recommend Courses")
+    # ----------- HOME TAB -----------
+    with tab1:
+        st.markdown("""
+        <div style="padding: 20px; background-color: #eaf4fc; border-radius: 10px;">
+            <h2 style="color:#003B73;">Welcome to the Smart Course Recommender!</h2>
+            <p style="font-size:17px; color:#333;">
+                This intelligent system helps you discover the best courses based on your input using machine learning and fuzzy keyword search. Whether you're unsure about a course name or looking for similar ones, we've got you covered.
+            </p>
+            <ul style="font-size:16px; color:#333;">
+                <li>🔍 Type a course name or related keywords</li>
+                <li>📚 Get the top 5 recommended courses</li>
+                <li>🌐 Visit the course links directly</li>
+            </ul>
+            <p style="font-size:17px; color:#666;"><i>Start exploring and upskill smartly!</i></p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        # Input from user
-        course_name = st.text_input("Enter a course name:")
-        if st.button("Get Recommendations"):
-            if course_name:
-                recommendations = recommend_courses(course_name, course_data, similarity_matrix)
-                if recommendations:
-                    st.write("Top Recommended Courses:")
-                    for rec in recommendations:
-                        st.markdown(
-                            f"- **[{rec['course_name']}]({rec['course_url']})** by {rec['university']}<br>"
-                            f"   *{rec['course_description']}*",
-                            unsafe_allow_html=True
-                        )
+    # ----------- RECOMMEND TAB -----------
+    with tab2:
+        st.markdown("<h3 style='color:#003B73;'>🔍 Search & Get Course Recommendations</h3>", unsafe_allow_html=True)
+
+        user_input = st.text_input("Enter a course name or keywords", help="Try something like 'machine learning', 'data science', etc.")
+        if st.button("Find Recommendations"):
+            if user_input:
+                closest_course = get_closest_course_name(user_input, course_data)
+                if closest_course:
+                    st.success(f"Showing results for: **{closest_course.title()}**")
+                    recommendations = recommend_courses(closest_course, course_data, similarity_matrix)
+                    if recommendations:
+                        display_course_cards(recommendations)
+                    else:
+                        st.warning("No recommendations found.")
                 else:
-                    st.warning("No recommendations found.")
+                    st.warning("No matching course found. Try a different keyword.")
             else:
-                st.warning("Please enter a course name.")
+                st.warning("Please enter something to search.")
 
-    elif choice == "About":
-        st.subheader("About")
-        st.write("This application provides course recommendations using a pre-trained model.")
+    # ----------- ABOUT TAB -----------
+    with tab3:
+        st.markdown("""
+        <div style="padding: 20px; background-color: #fef9ef; border-radius: 10px;">
+            <h3 style="color:#6A0572;">About This Project</h3>
+            <p style="font-size:16px; color:#444;">
+                This project is developed to recommend online courses based on user preferences using:
+            </p>
+            <ul style="font-size:16px; color:#333;">
+                <li>✅ Pre-trained similarity model using course content</li>
+                <li>✅ Keyword-based fuzzy matching with tolerance for typos</li>
+                <li>✅ Modern UI using Streamlit with enhanced readability</li>
+            </ul>
+            <p style="font-size:16px; color:#555;">Made with ❤️ by Himanshu Singh Bisht</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
