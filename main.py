@@ -4,8 +4,8 @@ import pandas as pd
 from difflib import get_close_matches
 
 # File paths
-COURSE_DATA_PATH = r"C:\Users\Acer\OneDrive\Desktop\course recommendation\Coursera.csv"
-SIMILARITY_PATH = r"C:\Users\Acer\OneDrive\Desktop\course recommendation\similarity.pkl"
+COURSE_DATA_PATH = r"Coursera.csv"
+SIMILARITY_PATH = r"similarity.pkl"
 
 # Load CSV and Pickle Files
 @st.cache_data
